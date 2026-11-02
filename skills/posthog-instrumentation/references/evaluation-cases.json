@@ -1,0 +1,48 @@
+{
+  "skill_name": "posthog-instrumentation",
+  "evaluation_mode": "isolated fixture patch proposal; not an App integration test",
+  "evals": [
+    {
+      "id": 1,
+      "name": "settings-business-boundary",
+      "prompt": "账号设置已经开发好了。补退出、删除账号、集合改名 PostHog events/properties，只针对埋点，不改功能实现或业务接口。样例：function logout() { session.clear(); posthog.reset(); }; function confirmLogout() { account.logout(); dismiss(); }; function confirmDeleteAccount() { account.logout(); dismiss(); }; function saveCollectionName(name) { collectionName = name; analytics.capture(events.collectionCreated); }。没有删除 API、保存 API、logout 完成通知或给任意账号 capture 的接口。请给最小 diff/patch 提案、埋点契约和行为场景/测试设计，不实际操作仓库。",
+      "expected_output": "业务签名、原语句和次序不变；只报可证事实；不在 reset 后用新身份报旧账号 logout_completed；删除仅确认，改名 memory；移除伪 collection_created。",
+      "files": [],
+      "expectations": [
+        "不修改 logout 或其他业务方法签名、业务语句与顺序，不添加业务回调",
+        "不在 PostHog reset 后无归属地上报旧用户 logout_completed，并明确无法可靠观测的缺口",
+        "不报账号删除成功，不新增删除网络请求",
+        "集合改名使用 memory 语义且移除错误 collection_created，不上传名称正文",
+        "提供场景先行与失败测试思路，验证业务调用次数/顺序保持原样"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "exposure-without-business-interference",
+      "prompt": "给已开发商品卡补 PostHog 曝光与购买点击。只改 analytics，保留业务接口/实现。既有 function buy(product) { if (!product.externalLink) return; router.openURL(product.externalLink); }，不能改该签名、原非空校验、导航调用。既有独立 analytics observer 提供 displayedURL、loadedURL、visibleFraction、isActive、isOccluded、surface、sessionID、selectedProductID 和选择稳定回调，可加 tracking-only helper，不可抽 View/改布局动画。网格同 session 同位置去重；Gallery 每次稳定选中不同商品重新报，初始 A 已就绪。需求阈值为 50%，不要求停留。请给最小伪 diff 和测试设计，解释 A→B→C→B→C→B→A 曝光次数、未曝光时点击、URL 不合法但原非空校验可通过的情况。不得实际改仓库。",
+      "expected_output": "旁路采集，购买逻辑原样；Gallery 七次，网格单独去重；当前 URL、缓存、遮挡/active 校验；点击不造曝光，不为 analytics 加 HTTP(S) 导航限制。",
+      "files": [],
+      "expectations": [
+        "buy 签名、非空校验、openURL 原调用保持不变，不由 analytics 校验限制购买",
+        "Gallery 序列明确七次曝光，网格去重与 Gallery 稳定选中去重分开",
+        "曝光匹配 displayedURL 与 loadedURL，缓存不被直接排除，同时检查可见比例、active 与遮挡",
+        "未曝光点击不补造曝光，使用无 impression 的真实关联语义",
+        "不为埋点改变 View 结构/布局/动画或业务接口，并提供对应回归设计"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "cleanup-attribution-and-missing-signals",
+      "prompt": "清理旧 PostHog 埋点并补个人页来源。只改埋点，排除归档模块。现有 typed helper captureFavorite(context) 只负责 analytics，可带 entry_source。商品 context 已规定 source=discovery/surface=item_list/tracking_version=2、零基 product_position。个人页另有一基 position。现有点击打开 sheet 时伪发 product_viewed，sheet 真实曝光已有 observer；真正收藏成功由旧回调发送，失败会回滚。要给 processing_completed 补来源必须改 TaskStateProvider 业务协议，当前无别的 carrier。旧 PropertyKeys.action 被其他事件使用，capture 还 fan-out 到 Meta 白名单。个人页 tab change 是共享回调，from/to 可含归档模块。请给新增/调整/清理/保留/缺口表、最小 patch 方案与测试，不能改业务协议、回滚或其他渠道，也不要写外部埋点表或 PostHog 远端。",
+      "expected_output": "保留 v2 属性和索引基数，个人页入口独立；清理伪曝光不删共享 key、不双发收藏；缺来源就省略；共享 tab 排除归档模块；检查 fan-out。",
+      "files": [],
+      "expectations": [
+        "个人页用 entry_source，不覆盖 v2 source/surface/version，保留两种索引基数",
+        "移除入口伪 product_viewed，曝光走原 observer，收藏仅原成功出口且失败不报成功",
+        "拒绝扩 TaskStateProvider，明确 completed 来源缺口",
+        "保留仍被使用的 action，检查 Meta fan-out 且不改映射/白名单",
+        "共享 tab 排除涉及归档模块的新增事件，提供旧/新上下文及排除范围测试，不操作远端"
+      ]
+    }
+  ]
+}
